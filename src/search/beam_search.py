@@ -301,7 +301,7 @@ if __name__ == "__main__":
     DynamicCache.seen_tokens = property(lambda self: self.get_seq_length())
   
   #LOAD VLLM
-  llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", dtype='float16', gpu_usage=0.85)
+  llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", dtype='float16', gpu_usage=0.5)
   print('loaded llm')
   prm_tokenizer, prm_model = load_prm("Qwen/Qwen2.5-Math-PRM-7B")
   print('loaded prm')
