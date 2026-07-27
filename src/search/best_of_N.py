@@ -102,6 +102,7 @@ N = 5
 TEMPRATURE = 0.5
 MAX_TOKENS = 400
 CHECKPOINT = 200
+SIZE = 3
 
 def create_sampling_parameters(n=N, temperature=TEMPRATURE, max_tokens=MAX_TOKENS):
     sampling_parameters = SamplingParams(n=n, temperature=temperature, max_tokens=max_tokens)
@@ -166,7 +167,7 @@ def majority_vote(question, candidate):
 if __name__ == "__main__":
   
   #LOAD VLLM
-  llm = load_vllm("Qwen/Qwen2.5-1.5B-Instruct", 'float16', 0.8)
+  llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", 'float16', 0.8)
 
   #LOAD DATA
   ds = load_dataset("HuggingFaceH4/MATH-500", split="test")
