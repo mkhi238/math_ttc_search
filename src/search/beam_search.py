@@ -325,7 +325,7 @@ if __name__ == "__main__":
       results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
       results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
       results_df['correct'] = results_df.apply(check_correct, axis=1)
-      results_df.to_csv('/mnt/d/math_ttc_search/results/beam_search_standard_MATH.csv', index=False)
+      results_df.to_csv('results/beam_search_standard_MATH_3B.csv', index=False)
       
   #COLLECT RESULTS - STANDARD
   results_df = pd.DataFrame(
@@ -334,7 +334,7 @@ if __name__ == "__main__":
   results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
   results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
   results_df['correct'] = results_df.apply(check_correct, axis=1)
-  results_df.to_csv('/mnt/d/math_ttc_search/results/beam_search_standard_MATH.csv', index=False)
+  results_df.to_csv('results/beam_search_standard_MATH_3B.csv', index=False)
   
   #GENERATE & EXTRACT SAMPLES - PROBABALISTIC
   results = {}
@@ -350,7 +350,7 @@ if __name__ == "__main__":
       results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
       results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
       results_df['correct'] = results_df.apply(check_correct, axis=1)
-      results_df.to_csv('/mnt/d/math_ttc_search/results/beam_search_probabalistic_MATH.csv', index=False)
+      results_df.to_csv('results/beam_search_probabalistic_MATH_3B.csv', index=False)
   
   #COLLECT RESULTS - PROBABALISTIC 
   results_df = pd.DataFrame(
@@ -359,7 +359,7 @@ if __name__ == "__main__":
   results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
   results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
   results_df['correct'] = results_df.apply(check_correct, axis=1)
-  results_df.to_csv('/mnt/d/math_ttc_search/results/beam_search_probabalistic_MATH.csv', index=False)
+  results_df.to_csv('results/beam_search_probabalistic_MATH_3B.csv', index=False)
   
   
   # #GENERATE & EXTRACT SAMPLES - DBS
@@ -376,7 +376,7 @@ if __name__ == "__main__":
       results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
       results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
       results_df['correct'] = results_df.apply(check_correct, axis=1)
-      results_df.to_csv('/mnt/d/math_ttc_search/results/beam_search_diverse_MATH.csv', index=False)
+      results_df.to_csv('results/beam_search_diverse_MATH_3B.csv', index=False)
       
   #COLLECT RESULTS - DBS
   results_df = pd.DataFrame(
@@ -385,7 +385,7 @@ if __name__ == "__main__":
   results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
   results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
   results_df['correct'] = results_df.apply(check_correct, axis=1)
-  results_df.to_csv('/mnt/d/math_ttc_search/results/beam_search_diverse_MATH.csv', index=False)
+  results_df.to_csv('results/beam_search_diverse_MATH_3B.csv', index=False)
   
   #GENERATE & EXTRACT SAMPLES - VALUE GUIDED
   results = {}
@@ -401,7 +401,7 @@ if __name__ == "__main__":
       results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
       results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
       results_df['correct'] = results_df.apply(check_correct, axis=1)
-      results_df.to_csv('/mnt/d/math_ttc_search/results/beam_search_PRM_MATH.csv', index=False)
+      results_df.to_csv('results/beam_search_PRM_MATH_3B.csv', index=False)
   
   #COLLECT RESULTS - VALUE GUIDED 
   results_df = pd.DataFrame(
@@ -410,6 +410,6 @@ if __name__ == "__main__":
   results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
   results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
   results_df['correct'] = results_df.apply(check_correct, axis=1)
-  results_df.to_csv('/mnt/d/math_ttc_search/results/beam_search_PRM_MATH.csv', index=False)
+  results_df.to_csv('results/beam_search_PRM_MATH_3B.csv', index=False)
   
 

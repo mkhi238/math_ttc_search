@@ -192,7 +192,7 @@ if __name__ == "__main__":
   results_df = results_df.merge(df[['problem', 'parsed_answer', 'level', 'subject']], on = 'problem', how = 'left')
   results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
   results_df['correct'] = results_df.apply(check_correct, axis=1)
-  results_df.to_csv('/mnt/d/math_ttc_search/results/best_of_n_MATH.csv', index=False)
+  results_df.to_csv('results/best_of_n_MATH_3B.csv', index=False)
 
   
   
