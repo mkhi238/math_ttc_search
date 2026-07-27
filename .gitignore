@@ -1,0 +1,31 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model / data caches
+hf_cache/
+*.safetensors
+*.bin
+*.gguf
+.cache/
+
+# Env
+.env
+*.token
+
+# OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
