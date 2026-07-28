@@ -324,7 +324,7 @@ if __name__ == "__main__":
         results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
         results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
         results_df['correct'] = results_df.apply(check_correct, axis=1)
-        results_df.to_csv(f'results/beam_search_standard_MATH_3B_{iter}_beam(s).csv', index=False)
+        results_df.to_csv(f'results/beam_search_standard_MATH_1.5B_{iter}_beam(s).csv', index=False)
         
     #COLLECT RESULTS - STANDARD
     results_df = pd.DataFrame(
@@ -333,7 +333,7 @@ if __name__ == "__main__":
     results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
     results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
     results_df['correct'] = results_df.apply(check_correct, axis=1)
-    results_df.to_csv(f'results/beam_search_standard_MATH_3B_{iter}_beam(s).csv', index=False)
+    results_df.to_csv(f'results/beam_search_standard_MATH_1.5B_{iter}_beam(s).csv', index=False)
     
   #GENERATE & EXTRACT SAMPLES - PROBABALISTIC
   for iter in N:
@@ -350,7 +350,7 @@ if __name__ == "__main__":
         results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
         results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
         results_df['correct'] = results_df.apply(check_correct, axis=1)
-        results_df.to_csv(f'results/beam_search_prob_MATH_3B_{iter}_beam(s).csv', index=False)
+        results_df.to_csv(f'results/beam_search_prob_MATH_1.5B_{iter}_beam(s).csv', index=False)
     
     #COLLECT RESULTS - PROBABALISTIC 
     results_df = pd.DataFrame(
@@ -359,7 +359,7 @@ if __name__ == "__main__":
     results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
     results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
     results_df['correct'] = results_df.apply(check_correct, axis=1)
-    results_df.to_csv(f'results/beam_search_prob_MATH_3B_{iter}_beam(s).csv', index=False)
+    results_df.to_csv(f'results/beam_search_prob_MATH_1.5B_{iter}_beam(s).csv', index=False)
   
   
   # #GENERATE & EXTRACT SAMPLES - DBS
@@ -377,7 +377,7 @@ if __name__ == "__main__":
         results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
         results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
         results_df['correct'] = results_df.apply(check_correct, axis=1)
-        results_df.to_csv(f'results/beam_search_diverse_MATH_3B_{iter}_beam(s).csv', index=False)
+        results_df.to_csv(f'results/beam_search_diverse_MATH_1.5B_{iter}_beam(s).csv', index=False)
         
     #COLLECT RESULTS - DBS
     results_df = pd.DataFrame(
@@ -386,7 +386,7 @@ if __name__ == "__main__":
     results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
     results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
     results_df['correct'] = results_df.apply(check_correct, axis=1)
-    results_df.to_csv(f'results/beam_search_diverse_MATH_3B_{iter}_beam(s).csv', index=False)
+    results_df.to_csv(f'results/beam_search_diverse_MATH_1.5B_{iter}_beam(s).csv', index=False)
   
   #GENERATE & EXTRACT SAMPLES - VALUE GUIDED
   for iter in N:
@@ -403,7 +403,7 @@ if __name__ == "__main__":
         results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
         results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
         results_df['correct'] = results_df.apply(check_correct, axis=1)
-        results_df.to_csv(f'results/beam_search_value_guided_MATH_3B_{iter}_beam(s).csv', index=False)
+        results_df.to_csv(f'results/beam_search_value_guided_MATH_1.5B_{iter}_beam(s).csv', index=False)
     
     #COLLECT RESULTS - VALUE GUIDED 
     results_df = pd.DataFrame(
@@ -412,6 +412,6 @@ if __name__ == "__main__":
     results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
     results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
     results_df['correct'] = results_df.apply(check_correct, axis=1)
-    results_df.to_csv(f'results/beam_search_value_guided_MATH_3B_{iter}_beam(s).csv', index=False)
+    results_df.to_csv(f'results/beam_search_value_guided_MATH_1.5B_{iter}_beam(s).csv', index=False)
     
 
