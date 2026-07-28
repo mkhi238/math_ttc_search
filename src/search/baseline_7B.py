@@ -10,9 +10,6 @@ from math_verify import parse, verify
 import time
 import random
 
-#PROMPT
-INTRO = r"Solve the following math problem efficiently and clearly, using a step-by-step format. Conclude with the final answer in the form $\boxed{answer}$."
-
 #FEW SHOT EXAMPLES
 FEW_SHOT_EXAMPLES = [
 """Problem: Simplify $\\frac{3}{4} + \\frac{1}{6}$. Express your answer as a common fraction.
@@ -95,11 +92,11 @@ The final answer is $\\boxed{\\frac{1}{2}}$.""",
 ]
 
 #PARAMETERS
-N = [1, 2, 4, 8, 16]
-TEMPRATURE = 0.75
+N = [1]
+TEMPRATURE = 0.0
 MAX_TOKENS = 400
 CHECKPOINT = 200
-SIZE = 3
+SIZE = 7 #7B model
 
 def create_sampling_parameters(n=N, temperature=TEMPRATURE, max_tokens=MAX_TOKENS):
     sampling_parameters = SamplingParams(n=n, temperature=temperature, max_tokens=max_tokens)
@@ -109,7 +106,7 @@ def format_prompt(question, pool = FEW_SHOT_EXAMPLES, k = 5):
   items = random.sample(pool, k)
   example_txt = "\n\n".join(items)
 
-  return (INTRO + "\n\n" + 
+  return (
     example_txt + 
     f"\nProblem: {question}\n"
     "Step 1:"
@@ -137,28 +134,14 @@ def check_correct(row):
   except Exception:
     return 0
 
-def majority_vote(question, candidate): 
+def process_response(question, candidate): 
   completions = candidate[question][0].outputs # CompletionOutput(idx, text, token_ids, logprobs,...)
-  parsed_list = []
-  for o in completions:
-    parsed = parse(o.text)
-    if not parsed:
-      continue
-    parsed_list.append(parsed)
-  if not parsed_list:
+  text = completions[0].text
+  try:
+    parsed = parse(text)
+    return parsed
+  except Exception:
     return None
-  seen = {}
-  scores = [1]*len(parsed_list)
-  for p in parsed_list:
-    for s in range(len(seen)):
-      if verify(p, seen[s]):
-        scores[s] += 1
-        break
-    else:
-      seen[len(seen)] = p
-      
-  best_idx = scores.index(max(scores))
-  return seen[best_idx]
 
 
 if __name__ == "__main__":
@@ -177,10 +160,11 @@ if __name__ == "__main__":
   for idx in N:
     samples = create_sampling_parameters(n = idx, temperature = TEMPRATURE, max_tokens = MAX_TOKENS)
     candidates, timing_dict = generate_responses(df, llm, samples)
+
     #EXTRACT
     results = {}
     for q in df['problem']:
-      results[q] = majority_vote(q, candidates)
+      results[q] = process_response(q, candidates)
 
     #COLLECT RESULTS
     results_df = pd.DataFrame(list(results.items()), columns=['problem', 'y_pred'])
@@ -188,7 +172,7 @@ if __name__ == "__main__":
     results_df = results_df.merge(df[['problem', 'parsed_answer', 'level', 'subject']], on = 'problem', how = 'left')
     results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
     results_df['correct'] = results_df.apply(check_correct, axis=1)
-    results_df.to_csv(f'results/best_of_n_MATH_3B_N:{idx}.csv', index=False)
+    results_df.to_csv(f'results/baseline_MATH_7B.csv', index=False)
 
   
   
