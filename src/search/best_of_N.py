@@ -99,7 +99,7 @@ N = [1, 2, 4, 8, 16]
 TEMPRATURE = 0.75
 MAX_TOKENS = 400
 CHECKPOINT = 200
-SIZE = 3
+SIZE = 1.5
 
 def create_sampling_parameters(n=N, temperature=TEMPRATURE, max_tokens=MAX_TOKENS):
     sampling_parameters = SamplingParams(n=n, temperature=temperature, max_tokens=max_tokens)

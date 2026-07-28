@@ -29,7 +29,7 @@ STOP_WORDS = ["\n\n", "Step"]
 MAX_ROUNDS = 10
 ALPHA = 0.65
 STOCHASTIC_TEMP = 5.0
-SIZE = 3
+SIZE = 1.5
 
 #PROMPT INTRO
 INTRO = r"Solve the following math problem efficiently and clearly, using a step-by-step format. Conclude with the final answer in the form $\boxed{answer}$."
