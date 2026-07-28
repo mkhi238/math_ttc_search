@@ -1,3 +1,5 @@
+import os
+os.environ.setdefault("VLLM_ATTENTION_BACKEND", "TRITON_ATTN")
 from vllm import LLM
 import torch
 from transformers import AutoTokenizer, AutoModel, AutoConfig
