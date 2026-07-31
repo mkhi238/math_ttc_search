@@ -295,8 +295,8 @@ if __name__ == "__main__":
   #LOAD VLLM
   llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", dtype='float16', gpu_usage=0.65)
   print('loaded llm')
-  prm_tokenizer, prm_model = None, None
-  #load_prm("Qwen/Qwen2.5-Math-PRM-7B")
+  #prm_tokenizer, prm_model = None, None
+  load_prm("Qwen/Qwen2.5-Math-PRM-7B")
   print('loaded prm')
   
   #LOAD DATA
