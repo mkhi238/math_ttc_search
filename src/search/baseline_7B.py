@@ -156,10 +156,10 @@ def process_response(question, candidate):
   completions = candidate[question][0].outputs
   text = completions[0].text
   boxed_text = extract_boxed(text)
-  if boxed_text is not None:
-    text = boxed_text
+  if boxed_text is None:
+    return None
   try:
-    parsed = parse(text)
+    parsed = parse(boxed_text)
     return parsed
   except Exception:
     return None
