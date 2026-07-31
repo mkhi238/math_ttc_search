@@ -34,7 +34,7 @@ TEMPRATURE = 0.4
 MAX_TOKENS = 200
 CHECKPOINT = 50
 STOP_WORDS = ["\n\n", "Step"]
-MAX_ROUNDS = 1
+MAX_ROUNDS = 10
 SIZE = 1.5
 NUM_FEWSHOT_POOLS = 12
 
@@ -212,7 +212,7 @@ def expansion(node, question, question_idx, llm):
   outputs = llm.generate(prompt, samples)
   
   for completion in outputs[0].outputs:
-    child_state = node.state_text + completion.text
+    child_state = node.state_text + "\n\n" + f"Step {node.step_num + 1}:" + completion.text
     child_step_num = node.step_num + 1
     is_terminal = "\\boxed" in completion.text or (child_step_num >= MAX_ROUNDS)
     child = MCTSNode(child_state, child_step_num, parent = node, terminal_flag=is_terminal)
@@ -243,13 +243,15 @@ def mcts_loop(root, num_iters, question, question_idx, llm, prm_tokenizer, prm_m
   
   return root
 
-def get_final_answer(root, mode = "most_visited"):
-  if mode == "most_visited":
-    return max(root.children, key = lambda c: c.n)
-  
-  else:
-    return max(root.children, key=lambda c: c.w / c.n if c.n != 0 else 0)
-  
+def get_final_answer(root, mode="most_visited"):
+  node = root
+  while node.children:
+    if mode == "most_visited":
+      node = max(node.children, key=lambda c: c.n)
+    else:
+      node = max(node.children, key=lambda c: c.w / c.n if c.n != 0 else 0)
+  return node
+
 def make_parse(resp):
   if resp is None:
     return None
@@ -294,7 +296,7 @@ if __name__ == "__main__":
     DynamicCache.seen_tokens = property(lambda self: self.get_seq_length())
   
   #LOAD VLLM
-  llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", dtype='float16', gpu_usage=0.65)
+  llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", dtype='float16', gpu_usage=0.25)
   print('loaded llm')
   prm_tokenizer, prm_model = load_prm("Qwen/Qwen2.5-Math-PRM-7B")
   print('loaded prm')
@@ -304,7 +306,7 @@ if __name__ == "__main__":
   df = pd.DataFrame(ds)
   df = make_math_parser(df, 'answer', 'parsed_answer')
   
-  for num_iters in [10,50.100]:
+  for num_iters in [10,50,100]:
     results = {}
     for idx, q in enumerate(df['problem']):
       start_time = time.time()
