@@ -291,6 +291,17 @@ if __name__ == "__main__":
     
   if not hasattr(DynamicCache, "seen_tokens"):
     DynamicCache.seen_tokens = property(lambda self: self.get_seq_length())
+    
+  if not hasattr(DynamicCache, "to_legacy_cache"):
+    def to_legacy_cache(self):
+        try:
+            return tuple(
+                (self.key_cache[i], self.value_cache[i])
+                for i in range(len(self.key_cache))
+            )
+        except AttributeError:
+            return None
+    DynamicCache.to_legacy_cache = to_legacy_cache
   
   #LOAD VLLM
   llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", dtype='float16', gpu_usage=0.65)
