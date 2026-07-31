@@ -9,7 +9,7 @@ import pandas as pd
 from math_verify import parse, verify
 import time
 import random
-import re
+
 
 #FEW SHOT EXAMPLES
 FEW_SHOT_EXAMPLES = [
@@ -135,38 +135,34 @@ def check_correct(row):
   except Exception:
     return 0
 
+def extract_boxed(text):
+  key = r'\boxed{'
+  idx = text.find(key)
+  if idx == -1:
+    return None
+  i = idx + len(key)
+  depth = 1
+  while i < len(text) and depth > 0:
+    if text[i] == '{':
+      depth += 1
+    elif text[i] == '}':
+      depth -= 1
+    i += 1
+  if depth != 0:
+    return None 
+  return text[:i]
+
 def process_response(question, candidate):
   completions = candidate[question][0].outputs
   text = completions[0].text
-  match = re.search(r"\\boxed\{.*?\}", text)
-  if match:
-    text = text[:match.end()]
+  boxed_text = extract_boxed(text)
+  if boxed_text is not None:
+    text = boxed_text
   try:
     parsed = parse(text)
     return parsed
   except Exception:
     return None
-
-def _test_boxed_extraction():
-  test_text = r"Step 1: blah. The answer is $\boxed{\frac{2}{5}}$. Problem: unrelated stuff \boxed{999}"
-  start = test_text.find(r"\boxed{")
-  depth = 0
-  end = None
-  for i in range(start + len(r"\boxed{") - 1, len(test_text)):
-    if test_text[i] == '{':
-      depth += 1
-    elif test_text[i] == '}':
-      depth -= 1
-      if depth == 0:
-        end = i
-        break
-  result = test_text[:end + 1]
-  expected = r"Step 1: blah. The answer is $\boxed{\frac{2}{5}}$."
-  print(f"GOT:      {result!r}")
-  print(f"EXPECTED: {expected!r}")
-  print(f"MATCH: {result == expected}")
-
-_test_boxed_extraction()
 
 if __name__ == "__main__":
   
@@ -179,8 +175,6 @@ if __name__ == "__main__":
   df = make_math_parser(df, 'answer', 'parsed_answer')
   undefined_count = df['parsed_answer'].apply(lambda p: len(p) == 0).sum()
   print(f"{undefined_count} / {len(df)} rows failed to parse at all")
-  df = df.iloc[[3,6,15]]
-  
   
   #GENERATE SAMPLES  
   for idx in N:

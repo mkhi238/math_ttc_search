@@ -141,12 +141,30 @@ def check_correct(row):
     return int(verify(row['y_true'], row['y_pred']))
   except Exception:
     return 0
+  
+def extract_boxed(text):
+  key = r'\boxed{'
+  idx = text.find(key)
+  if idx == -1:
+    return None
+  i = idx + len(key)
+  depth = 1
+  while i < len(text) and depth > 0:
+    if text[i] == '{':
+      depth += 1
+    elif text[i] == '}':
+      depth -= 1
+    i += 1
+  if depth != 0:
+    return None  # unbalanced, likely cut off by max_tokens
+  return text[:i]
 
 def majority_vote(question, candidate): 
   completions = candidate[question][0].outputs # CompletionOutput(idx, text, token_ids, logprobs,...)
   parsed_list = []
   for o in completions:
-    parsed = parse(o.text)
+    boxed_text = extract_boxed(o.text)
+    parsed = parse(boxed_text)
     if not parsed:
       continue
     parsed_list.append(parsed)
