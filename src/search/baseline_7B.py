@@ -9,6 +9,7 @@ import pandas as pd
 from math_verify import parse, verify
 import time
 import random
+import re
 
 #FEW SHOT EXAMPLES
 FEW_SHOT_EXAMPLES = [
@@ -134,16 +135,38 @@ def check_correct(row):
   except Exception:
     return 0
 
-def process_response(question, candidate): 
-  completions = candidate[question][0].outputs # CompletionOutput(idx, text, token_ids, logprobs,...)
+def process_response(question, candidate):
+  completions = candidate[question][0].outputs
   text = completions[0].text
-  print(f"\n=== {question[:60]!r} ===\nFULL TEXT:\n{text}\n")
+  match = re.search(r"\\boxed\{.*?\}", text)
+  if match:
+    text = text[:match.end()]
   try:
     parsed = parse(text)
     return parsed
   except Exception:
     return None
 
+def _test_boxed_extraction():
+  test_text = r"Step 1: blah. The answer is $\boxed{\frac{2}{5}}$. Problem: unrelated stuff \boxed{999}"
+  start = test_text.find(r"\boxed{")
+  depth = 0
+  end = None
+  for i in range(start + len(r"\boxed{") - 1, len(test_text)):
+    if test_text[i] == '{':
+      depth += 1
+    elif test_text[i] == '}':
+      depth -= 1
+      if depth == 0:
+        end = i
+        break
+  result = test_text[:end + 1]
+  expected = r"Step 1: blah. The answer is $\boxed{\frac{2}{5}}$."
+  print(f"GOT:      {result!r}")
+  print(f"EXPECTED: {expected!r}")
+  print(f"MATCH: {result == expected}")
+
+_test_boxed_extraction()
 
 if __name__ == "__main__":
   
