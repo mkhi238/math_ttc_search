@@ -30,6 +30,7 @@ MAX_ROUNDS = 10
 ALPHA = 0.65
 STOCHASTIC_TEMP = 5.0
 SIZE = 1.5
+NUM_FEWSHOT_POOLS = 12
 
 #PROMPT INTRO
 INTRO = r"Solve the following math problem efficiently and clearly, using a step-by-step format. Conclude with the final answer in the form $\boxed{answer}$."
@@ -115,20 +116,20 @@ Step 1: Recall the standard value $\\cos(60^\\circ) = \\frac{1}{2}$.
 The final answer is $\\boxed{\\frac{1}{2}}$.""",
 ]
 
+FEWSHOT_POOLS = ["\n\n".join(random.sample(FEW_SHOT_EXAMPLES, 5)) for _ in range(NUM_FEWSHOT_POOLS)]
+
 def text_similarity(a, b):
   return SequenceMatcher(isjunk = None, a = a, b = b, autojunk=False).ratio()
 
 def create_sampling_parameters(n, temperature=TEMPRATURE, max_tokens=MAX_TOKENS, stop = STOP_WORDS):
     sampling_parameters = SamplingParams(n = n, temperature=temperature, max_tokens=max_tokens, stop = stop, logprobs = 1)
     return sampling_parameters
-  
-def format_beam_prompt(question, beam_so_far, step_num, pool = FEW_SHOT_EXAMPLES, k = 5):
-  items = random.sample(pool, k)
-  example_txt = "\n\n".join(items)
 
+def format_beam_prompt(question, question_idx, beam_so_far, step_num):
+  example_txt = FEWSHOT_POOLS[question_idx % NUM_FEWSHOT_POOLS]
   return (
     INTRO + "\n\n" +
-    example_txt + 
+    example_txt +
     f"\n\nProblem: {question}\n" +
     beam_so_far +
     f"Step {step_num}:"
@@ -170,31 +171,27 @@ def prm_scoring(question, candidates, prm_tokenizer, prm_model):
     out.append(score)
   return out
 
-def beam_search(question, llm, prm_tokenizer, prm_model, n, m, method = "standard"):
+def beam_search(question, question_idx, llm, prm_tokenizer, prm_model, n, m, method = "standard"):
   beams = [{"text_so_far": "", "score": 0.0, "step": 1, "num_tokens": 0, "finished": False}]
   round = 0
   
   while round < MAX_ROUNDS:
-    candidates = []
     total_finished = sum(item['finished'] for item in beams)
     if total_finished == len(beams):
       break
     
-    for b in beams:
-      if b["finished"] == True:
-        candidates.append(b)
-        continue
+    active_beams, finished_beams = [b for b in beams if not b["finished"]], [b for b in beams if b["finished"]]
+    candidates = list(finished_beams)
+    if active_beams:
+      prompts = [format_beam_prompt(question,question_idx, b['text_so_far'], b['step']) for b in active_beams]
+      n_this_round = n if round == 0 else m
+      samples = create_sampling_parameters(n = n_this_round)
+      outputs = llm.generate(prompts, samples)
       
-      else:
-        #build one prompt per active beam
-        prompt = []
-        prompt.append(format_beam_prompt(question, b['text_so_far'], b['step']))
-        n_this_round = n if round == 0 else m
-        samples = create_sampling_parameters(n = n_this_round)
-        
-        output = llm.generate(prompt, samples)
-        
-        for completion in output[0].outputs:
+      for b, output in zip(active_beams, outputs):
+        for completion in output.outputs:
+          print(f"stop_reason={completion.stop_reason} | text={completion.text[:100]!r}")
+
           candidates.append({
           "text_so_far": b['text_so_far'] + "\n\n" + f"Step {b['step']}:" + completion.text,
           "score": b['score'] + completion.cumulative_logprob,
@@ -243,13 +240,10 @@ def beam_search(question, llm, prm_tokenizer, prm_model, n, m, method = "standar
         beams.extend(group_pick)
         remaining = [c for c in remaining if c not in group_pick] 
           
-          
+    #beam round growth      
     round += 1
-  
-  finished = []     
-  for b in beams:
-    if b['finished']:
-      finished.append(b)
+
+  finished = [b for b in beams if b['finished']]     
   if not finished:
     return None
   best = heapq.nlargest(1, finished, key = lambda x: x['score'] / length_norm(x['num_tokens']))
@@ -299,7 +293,7 @@ if __name__ == "__main__":
     DynamicCache.seen_tokens = property(lambda self: self.get_seq_length())
   
   #LOAD VLLM
-  llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", dtype='float16', gpu_usage=0.4)
+  llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", dtype='float16', gpu_usage=0.65)
   print('loaded llm')
   prm_tokenizer, prm_model = None, None
   #load_prm("Qwen/Qwen2.5-Math-PRM-7B")
@@ -309,92 +303,13 @@ if __name__ == "__main__":
   ds = load_dataset("HuggingFaceH4/MATH-500", split="test")
   df = pd.DataFrame(ds)
   df = make_math_parser(df, 'answer', 'parsed_answer')
-  
-  #GENERATE & EXTRACT SAMPLES - STANDARD
-  for iter in N:
-    results = {}
-    for idx, q in enumerate(df['problem']):
-      start = time.time()
-      resp = beam_search(q, llm, prm_tokenizer, prm_model,n = iter, m = M, method = "standard")
-      elapsed = time.time() - start
-      results[q] = (make_parse(resp), elapsed)
-      if idx % CHECKPOINT == 0:
-        results_df = pd.DataFrame(
-        [(q, a, t) for q, (a, t) in results.items()],
-        columns=['problem', 'y_pred', 'time_seconds'])
-        results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
-        results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
-        results_df['correct'] = results_df.apply(check_correct, axis=1)
-        results_df.to_csv(f'results/beam_search_standard_MATH_1.5B_{iter}_beam(s).csv', index=False)
-        
-    #COLLECT RESULTS - STANDARD
-    results_df = pd.DataFrame(
-    [(q, a, t) for q, (a, t) in results.items()],
-    columns=['problem', 'y_pred', 'time_seconds'])
-    results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
-    results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
-    results_df['correct'] = results_df.apply(check_correct, axis=1)
-    results_df.to_csv(f'results/beam_search_standard_MATH_1.5B_{iter}_beam(s).csv', index=False)
-    
-  #GENERATE & EXTRACT SAMPLES - PROBABALISTIC
-  for iter in N:
-    results = {}
-    for idx, q in enumerate(df['problem']):
-      start = time.time()
-      resp = beam_search(q, llm, prm_tokenizer, prm_model, n = iter, m = M, method = "probabalistic")
-      elapsed = time.time() - start
-      results[q] = (make_parse(resp), elapsed)
-      if idx % CHECKPOINT == 0:
-        results_df = pd.DataFrame(
-        [(q, a, t) for q, (a, t) in results.items()],
-        columns=['problem', 'y_pred', 'time_seconds'])
-        results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
-        results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
-        results_df['correct'] = results_df.apply(check_correct, axis=1)
-        results_df.to_csv(f'results/beam_search_prob_MATH_1.5B_{iter}_beam(s).csv', index=False)
-    
-    #COLLECT RESULTS - PROBABALISTIC 
-    results_df = pd.DataFrame(
-    [(q, a, t) for q, (a, t) in results.items()],
-    columns=['problem', 'y_pred', 'time_seconds'])
-    results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
-    results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
-    results_df['correct'] = results_df.apply(check_correct, axis=1)
-    results_df.to_csv(f'results/beam_search_prob_MATH_1.5B_{iter}_beam(s).csv', index=False)
-  
-  
-  # #GENERATE & EXTRACT SAMPLES - DBS
-  for iter in N:
-    results = {}
-    for idx, q in enumerate(df['problem']):
-      start = time.time()
-      resp = beam_search(q, llm, prm_tokenizer, prm_model, n = iter, m = M, method = "diverse")
-      elapsed = time.time() - start
-      results[q] = (make_parse(resp), elapsed)
-      if idx % CHECKPOINT == 0:
-        results_df = pd.DataFrame(
-        [(q, a, t) for q, (a, t) in results.items()],
-        columns=['problem', 'y_pred', 'time_seconds'])
-        results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
-        results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
-        results_df['correct'] = results_df.apply(check_correct, axis=1)
-        results_df.to_csv(f'results/beam_search_diverse_MATH_1.5B_{iter}_beam(s).csv', index=False)
-        
-    #COLLECT RESULTS - DBS
-    results_df = pd.DataFrame(
-    [(q, a, t) for q, (a, t) in results.items()],
-    columns=['problem', 'y_pred', 'time_seconds'])
-    results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
-    results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
-    results_df['correct'] = results_df.apply(check_correct, axis=1)
-    results_df.to_csv(f'results/beam_search_diverse_MATH_1.5B_{iter}_beam(s).csv', index=False)
-  
-  #GENERATE & EXTRACT SAMPLES - VALUE GUIDED
+
+  # #GENERATE & EXTRACT SAMPLES - STANDARD
   # for iter in N:
   #   results = {}
   #   for idx, q in enumerate(df['problem']):
   #     start = time.time()
-  #     resp = beam_search(q, llm, prm_tokenizer, prm_model, n = iter, m = M, method = "PRM")
+  #     resp = beam_search(q, idx, llm, prm_tokenizer, prm_model,n = iter, m = M, method = "standard")
   #     elapsed = time.time() - start
   #     results[q] = (make_parse(resp), elapsed)
   #     if idx % CHECKPOINT == 0:
@@ -404,15 +319,94 @@ if __name__ == "__main__":
   #       results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
   #       results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
   #       results_df['correct'] = results_df.apply(check_correct, axis=1)
-  #       results_df.to_csv(f'results/beam_search_value_guided_MATH_1.5B_{iter}_beam(s).csv', index=False)
-    
-  #   #COLLECT RESULTS - VALUE GUIDED 
+  #       results_df.to_csv(f'/mnt/d/math_ttc_search/results/beam_search_standard_MATH_1.5B_{iter}_beam(s).csv', index=False)
+        
+  #   #COLLECT RESULTS - STANDARD
   #   results_df = pd.DataFrame(
   #   [(q, a, t) for q, (a, t) in results.items()],
   #   columns=['problem', 'y_pred', 'time_seconds'])
   #   results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
   #   results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
   #   results_df['correct'] = results_df.apply(check_correct, axis=1)
-  #   results_df.to_csv(f'results/beam_search_value_guided_MATH_1.5B_{iter}_beam(s).csv', index=False)
+  #   results_df.to_csv(f'/mnt/d/math_ttc_search/results/beam_search_standard_MATH_1.5B_{iter}_beam(s).csv', index=False)
+    
+  #GENERATE & EXTRACT SAMPLES - PROBABALISTIC
+  # for iter in [16]:
+  #   results = {}
+  #   for idx, q in enumerate(df['problem']):
+  #     start = time.time()
+  #     resp = beam_search(q, idx, llm, prm_tokenizer, prm_model, n = iter, m = M, method = "probabalistic")
+  #     elapsed = time.time() - start
+  #     results[q] = (make_parse(resp), elapsed)
+  #     if idx % CHECKPOINT == 0:
+  #       results_df = pd.DataFrame(
+  #       [(q, a, t) for q, (a, t) in results.items()],
+  #       columns=['problem', 'y_pred', 'time_seconds'])
+  #       results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
+  #       results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
+  #       results_df['correct'] = results_df.apply(check_correct, axis=1)
+  #       results_df.to_csv(f'/mnt/d/math_ttc_search/results/beam_search_prob_MATH_1.5B_{iter}_beam(s).csv', index=False)
+    
+  #   #COLLECT RESULTS - PROBABALISTIC 
+  #   results_df = pd.DataFrame(
+  #   [(q, a, t) for q, (a, t) in results.items()],
+  #   columns=['problem', 'y_pred', 'time_seconds'])
+  #   results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
+  #   results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
+  #   results_df['correct'] = results_df.apply(check_correct, axis=1)
+  #   results_df.to_csv(f'/mnt/d/math_ttc_search/results/beam_search_prob_MATH_1.5B_{iter}_beam(s).csv', index=False)
+  
+  
+  # # #GENERATE & EXTRACT SAMPLES - DBS
+  # for iter in N:
+  #   results = {}
+  #   for idx, q in enumerate(df['problem']):
+  #     start = time.time()
+  #     resp = beam_search(q, idx, llm, prm_tokenizer, prm_model, n = iter, m = M, method = "diverse")
+  #     elapsed = time.time() - start
+  #     results[q] = (make_parse(resp), elapsed)
+  #     if idx % CHECKPOINT == 0:
+  #       results_df = pd.DataFrame(
+  #       [(q, a, t) for q, (a, t) in results.items()],
+  #       columns=['problem', 'y_pred', 'time_seconds'])
+  #       results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
+  #       results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
+  #       results_df['correct'] = results_df.apply(check_correct, axis=1)
+  #       results_df.to_csv(f'/mnt/d/math_ttc_search/results/beam_search_diverse_MATH_1.5B_{iter}_beam(s).csv', index=False)
+        
+  #   #COLLECT RESULTS - DBS
+  #   results_df = pd.DataFrame(
+  #   [(q, a, t) for q, (a, t) in results.items()],
+  #   columns=['problem', 'y_pred', 'time_seconds'])
+  #   results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
+  #   results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
+  #   results_df['correct'] = results_df.apply(check_correct, axis=1)
+  #   results_df.to_csv(f'/mnt/d/math_ttc_search/results/beam_search_diverse_MATH_1.5B_{iter}_beam(s).csv', index=False)
+  
+  #GENERATE & EXTRACT SAMPLES - VALUE GUIDED
+  for iter in N:
+    results = {}
+    for idx, q in enumerate(df['problem']):
+      start = time.time()
+      resp = beam_search(q, idx, llm, prm_tokenizer, prm_model, n = iter, m = M, method = "PRM")
+      elapsed = time.time() - start
+      results[q] = (make_parse(resp), elapsed)
+      if idx % CHECKPOINT == 0:
+        results_df = pd.DataFrame(
+        [(q, a, t) for q, (a, t) in results.items()],
+        columns=['problem', 'y_pred', 'time_seconds'])
+        results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
+        results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
+        results_df['correct'] = results_df.apply(check_correct, axis=1)
+        results_df.to_csv(f'results/beam_search_value_guided_MATH_1.5B_{iter}_beam(s).csv', index=False)
+    
+    #COLLECT RESULTS - VALUE GUIDED 
+    results_df = pd.DataFrame(
+    [(q, a, t) for q, (a, t) in results.items()],
+    columns=['problem', 'y_pred', 'time_seconds'])
+    results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
+    results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
+    results_df['correct'] = results_df.apply(check_correct, axis=1)
+    results_df.to_csv(f'results/beam_search_value_guided_MATH_1.5B_{iter}_beam(s).csv', index=False)
     
 

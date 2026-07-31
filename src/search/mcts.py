@@ -1,10 +1,16 @@
-#Expansion: The AI generates multiple possible next steps instead of just one.
-#Simulation & error checking: It tests different reasoning paths and identifies incorrect steps.
-#Backpropagation: The model learns from mistakes and adjusts its reasoning.
-#Selection: It chooses the best reasoning path to continue improving accuracy.
+# selection walks down from root via UCT, lands on some node with no children. That's the "come to a node" part.
+
+# expansion fires on that node, generates M candidate next steps, creates M new child nodes, all n=0, w=0. This is the part your description skipped slightly, it's not "find the score of that branch," it's first "create the branch," M of them at once, and only after they exist does scoring happen.
+
+# simulation (Option 1, PRM-direct, what you're building right now) takes one of those M new children, hands its current partial state_text to the PRM, gets back one scalar, how promising this partial branch looks. That's your "find the score" step, and to be exact, it's scoring one specific child's state, not "that branch" abstractly, whichever single child you picked to evaluate this iteration.
+
+# backprop takes that scalar and walks it up the path, root to the scored child, updating n and w at every node along the way. This is exactly your "update Q value" step, Q isn't stored directly, remember, it's computed live as w/n whenever UCT needs it, but backprop is what keeps w and n accurate so that future Q reads are correct.
+
+# Then yes, continue, next iteration calls selection(root) again, and because the numbers just changed, UCT might send it down a different path this time.
 
 #Expansion
 #IMPORTS
+M = 4
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -13,28 +19,24 @@ from serve_vllm.model import load_vllm, load_prm
 from vllm import SamplingParams
 import pandas as pd
 import heapq
-from scipy.special import softmax
 import numpy as np
 import random
 import time
 from math_verify import parse, verify
-from difflib import SequenceMatcher
 import torch
 import torch.nn.functional as F
 from transformers.cache_utils import DynamicCache
 
 
 #PARAMETERS
-N = [1, 2, 4, 8, 16]
-M = 4
+
 TEMPRATURE = 0.4
 MAX_TOKENS = 200
 CHECKPOINT = 50
 STOP_WORDS = ["\n\n", "Step"]
-MAX_ROUNDS = 10
-ALPHA = 0.65
-STOCHASTIC_TEMP = 5.0
-SIZE = 3
+MAX_ROUNDS = 1
+SIZE = 1.5
+NUM_FEWSHOT_POOLS = 12
 
 #PROMPT INTRO
 INTRO = r"Solve the following math problem efficiently and clearly, using a step-by-step format. Conclude with the final answer in the form $\boxed{answer}$."
@@ -120,113 +122,134 @@ Step 1: Recall the standard value $\\cos(60^\\circ) = \\frac{1}{2}$.
 The final answer is $\\boxed{\\frac{1}{2}}$.""",
 ]
 
-
+FEWSHOT_POOLS = ["\n\n".join(random.sample(FEW_SHOT_EXAMPLES, 5)) for _ in range(NUM_FEWSHOT_POOLS)]
 
 def create_sampling_parameters(n, temperature=TEMPRATURE, max_tokens=MAX_TOKENS, stop = STOP_WORDS):
     sampling_parameters = SamplingParams(n = n, temperature=temperature, max_tokens=max_tokens, stop = stop, logprobs = 1)
     return sampling_parameters
   
-def format_beam_prompt(question, beam_so_far, step_num, pool = FEW_SHOT_EXAMPLES, k = 5):
-  items = random.sample(pool, k)
-  example_txt = "\n\n".join(items)
-
+def format_prompt(question, question_idx, beam_so_far, step_num):
+  example_txt = FEWSHOT_POOLS[question_idx % NUM_FEWSHOT_POOLS]
   return (
     INTRO + "\n\n" +
-    example_txt + 
+    example_txt +
     f"\n\nProblem: {question}\n" +
     beam_so_far +
     f"Step {step_num}:"
   )
-  
-def format_prm_prompt(question, text_so_far):
+
+def format_node_estimate_prompt(question, text_so_far):
     steps = text_so_far.strip().split("\n\n")
     return question + "\n\n" + "<extra_0>".join(steps) + "<extra_0>"
-
-def length_norm(seq_len, alpha = ALPHA):
-  return (5+seq_len)**alpha / 6**alpha
-
-
-def prm_scoring(question, candidates, prm_tokenizer, prm_model):
+  
+def prm_scoring(question, question_idx, node, prm_tokenizer, prm_model):
+  
   step_sep_id = prm_tokenizer.encode("<extra_0>")[0]
   out = []
-  for c in candidates:
-    prompts = format_prm_prompt(question, c['text_so_far'])
-    #input_ids [15, 892, 33, 4021, step_sep_id, 77, 12, step_sep_id, ...]
-    input_ids = prm_tokenizer.encode(prompts, return_tensors="pt").to(prm_model.device) #(1,N) from return_tensor = 'pt'
-    with torch.no_grad():
-      output = prm_model(input_ids=input_ids)
-    logits = output.logits #(batch = 1, seq len = N, output class (T,F) = 2)
-    #token masks [False, False, False, False, True, False, False, True, ...]
-    token_masks = (input_ids == step_sep_id) #(1,N)
-    #probs is (1,N,2)
-    probs = F.softmax(logits, dim=-1) #(1,N,2)
-    masked_probs = probs * token_masks.unsqueeze(2)
-    
-    nonzero_probs = masked_probs[0][masked_probs[0] != 0] #masked_probs[0] pulls out batch dim, leaving (N,2)
-    step_rewards = nonzero_probs.view(-1, 2)[:, 1]
-    
-    if len(step_rewards) > 0:
-      score = step_rewards[-1].item()
-    else:
-      score = 0.0
-      
-    out.append(score)
-  return out
 
-def beam_search(question, llm, prm_tokenizer, prm_model, n, m, method = "standard"):
-  beams = [{"text_so_far": "", "score": 0.0, "step": 1, "num_tokens": 0, "finished": False}]
-  round = 0
-
-  while round < MAX_ROUNDS:
-    candidates = []
-    total_finished = sum(item['finished'] for item in beams)
-    if total_finished == len(beams):
-      break
-    
-    for b in beams:
-      if b["finished"] == True:
-        candidates.append(b)
-        continue
-      
-      else:
-        #build one prompt per active beam
-        prompt = []
-        prompt.append(format_beam_prompt(question, b['text_so_far'], b['step']))
-        n_this_round = n if round == 0 else m
-        samples = create_sampling_parameters(n = n_this_round)
-        
-        output = llm.generate(prompt, samples)
-        
-        for completion in output[0].outputs:
-          candidates.append({
-          "text_so_far": b['text_so_far'] + "\n\n" + f"Step {b['step']}:" + completion.text,
-          "score": b['score'] + completion.cumulative_logprob,
-          "step": b['step'] + 1,
-          "num_tokens": b["num_tokens"] + len(completion.token_ids),
-          "finished": "\\boxed{" in completion.text,
-          })
-          
-    if method == "standard":    
-      beams = heapq.nlargest(n, candidates, key = lambda x: x['score'] / length_norm(x['num_tokens']))
-
-    elif method == "PRM":
-      beams = []
-      scores = prm_scoring(question, candidates, prm_tokenizer, prm_model)
-      top_idx = heapq.nlargest(n, range(len(candidates)), lambda i : scores[i])
-      for i in top_idx:
-        beams.append(candidates[i])
-    
-    round += 1
+  prompts = format_node_estimate_prompt(question, node.state_text)
+  #input_ids [15, 892, 33, 4021, step_sep_id, 77, 12, step_sep_id, ...]
+  input_ids = prm_tokenizer.encode(prompts, return_tensors="pt").to(prm_model.device) #(1,N) from return_tensor = 'pt'
+  with torch.no_grad():
+    output = prm_model(input_ids=input_ids)
+  logits = output.logits #(batch = 1, seq len = N, output class (T,F) = 2)
+  #token masks [False, False, False, False, True, False, False, True, ...]
+  token_masks = (input_ids == step_sep_id) #(1,N)
+  #probs is (1,N,2)
+  probs = F.softmax(logits, dim=-1) #(1,N,2)
+  masked_probs = probs * token_masks.unsqueeze(2)
   
-  finished = []     
-  for b in beams:
-    if b['finished']:
-      finished.append(b)
-  if not finished:
-    return None
-  best = heapq.nlargest(1, finished, key = lambda x: x['score'] / length_norm(x['num_tokens']))
-  return best[0]['text_so_far']
+  nonzero_probs = masked_probs[0][masked_probs[0] != 0] #masked_probs[0] pulls out batch dim, leaving (N,2)
+  step_rewards = nonzero_probs.view(-1, 2)[:, 1]
+  
+  if len(step_rewards) > 0:
+    score = step_rewards[-1].item()
+  else:
+    score = 0.0
+    
+  out.append(score)
+  return out
+  
+def UCT(node, c = 2, eps=1e-8):
+  if node.n != 0:
+    n = node.n
+  else:
+    n = eps
+  if node.parent.n != 0:
+    parent_n = node.parent.n
+  else:
+    parent_n = eps
+  q = node.w / n
+  uct = q + c * np.sqrt(np.log(parent_n)/n)
+  return uct
 
+class MCTSNode():
+  def __init__(self, state_text, step_num, n = 0, w = 0, terminal_flag = None, parent = None):
+    self.state_text = state_text
+    self.step_num = step_num
+    self.parent = parent
+    self.terminal_flag = terminal_flag
+    self.n = n #couter: how many times search passed thru this node
+    self.w = w #backprop: total value backprop through the node
+    self.children = []
+  
+  def select_best_node(self, children):
+    top_child = heapq.nlargest(1, children, key= lambda child: UCT(child))[0]
+    return top_child
+  
+def selection(node):
+  curr = node
+  while curr.children:
+    curr = curr.select_best_node(curr.children)
+  return curr
+
+def expansion(node, question, question_idx, llm):
+  if node.terminal_flag == True: #node is done expanding
+    return (node, False)
+  
+  prompt = format_prompt(question, question_idx, node.state_text, node.step_num)
+  samples = create_sampling_parameters(n = M)
+  outputs = llm.generate(prompt, samples)
+  
+  for completion in outputs[0].outputs:
+    child_state = node.state_text + completion.text
+    child_step_num = node.step_num + 1
+    is_terminal = "\\boxed" in completion.text or (child_step_num >= MAX_ROUNDS)
+    child = MCTSNode(child_state, child_step_num, parent = node, terminal_flag=is_terminal)
+    node.children.append(child)
+  
+  return (node.children, True)
+
+def simulation(question, question_idx, node,  prm_tokenizer, prm_model):  
+  score = prm_scoring(question, question_idx, node, prm_tokenizer, prm_model)
+  return score[0]
+
+def backpropagation(node, score):
+  curr = node
+  while curr is not None:
+    prev = curr
+    curr.n += 1
+    curr.w += score
+    curr = curr.parent
+  return prev
+  
+def mcts_loop(root, num_iters, question, question_idx, llm, prm_tokenizer, prm_model):
+  for _ in range(num_iters):
+    leaf = selection(root)
+    result, expanded = expansion(leaf, question, question_idx, llm)
+    ts = result[0] if expanded else result
+    score = simulation(question, question_idx, ts, prm_tokenizer, prm_model) 
+    root = backpropagation(ts, score)
+  
+  return root
+
+def get_final_answer(root, mode = "most_visited"):
+  if mode == "most_visited":
+    return max(root.children, key = lambda c: c.n)
+  
+  else:
+    return max(root.children, key=lambda c: c.w / c.n if c.n != 0 else 0)
+  
 def make_parse(resp):
   if resp is None:
     return None
@@ -239,3 +262,73 @@ def check_correct(row):
     return int(verify(row['y_true'], row['y_pred']))
   except Exception:
     return 0
+    
+if __name__ == "__main__":
+  #Monkey Patching to add DynamicCache.from_legacy_cache needed for PRM model from prev HF transformers versions
+  #Need to Monkey Patch 4 different potential throws
+  if not hasattr(DynamicCache, "from_legacy_cache"):
+    @classmethod
+    def from_legacy_cache(cls, past_key_values=None):
+      cache = cls()
+      if past_key_values is not None:
+        if isinstance(past_key_values, cls):
+          return past_key_values
+        for layer_idx in range(len(past_key_values)):
+          key_states, value_states = past_key_values[layer_idx]
+          cache.update(key_states, value_states, layer_idx)
+      return cache
+    DynamicCache.from_legacy_cache = from_legacy_cache
+    
+  if not hasattr(DynamicCache, "get_usable_length"):
+    def get_usable_length(self, new_seq_length, layer_idx=0):
+      previous_seq_length = self.get_seq_length(layer_idx)
+      return previous_seq_length
+    DynamicCache.get_usable_length = get_usable_length
+    
+  if not hasattr(DynamicCache, "get_max_length"):
+    def get_max_length(self):
+      return None
+    DynamicCache.get_max_length = get_max_length
+    
+  if not hasattr(DynamicCache, "seen_tokens"):
+    DynamicCache.seen_tokens = property(lambda self: self.get_seq_length())
+  
+  #LOAD VLLM
+  llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", dtype='float16', gpu_usage=0.65)
+  print('loaded llm')
+  prm_tokenizer, prm_model = load_prm("Qwen/Qwen2.5-Math-PRM-7B")
+  print('loaded prm')
+  
+  #LOAD DATA
+  ds = load_dataset("HuggingFaceH4/MATH-500", split="test")
+  df = pd.DataFrame(ds)
+  df = make_math_parser(df, 'answer', 'parsed_answer')
+  
+  for num_iters in [10,50.100]:
+    results = {}
+    for idx, q in enumerate(df['problem']):
+      start_time = time.time()
+      root = MCTSNode("", 0, n=0, w=0, terminal_flag=None, parent=None)
+      root = mcts_loop(root, num_iters, q, idx, llm, prm_tokenizer, prm_model)
+      final = get_final_answer(root, mode="most_visited")
+      elapsed = time.time() - start_time
+      results[q] = (make_parse(final.state_text), elapsed)
+      if idx % CHECKPOINT == 0:
+        results_df = pd.DataFrame(
+        [(q, a, t) for q, (a, t) in results.items()],
+        columns=['problem', 'y_pred', 'time_seconds'])
+        results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
+        results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
+        results_df['correct'] = results_df.apply(check_correct, axis=1)
+        results_df.to_csv(f'/mnt/d/math_ttc_search/results/mcts_MATH_1.5B_{num_iters}_beam(s).csv', index=False)
+
+    #COLLECT RESULTS
+    results_df = pd.DataFrame(
+    [(q, a, t) for q, (a, t) in results.items()],
+    columns=['problem', 'y_pred', 'time_seconds'])
+    results_df = results_df.merge(df[['problem', 'parsed_answer']], on = 'problem', how = 'left')
+    results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
+    results_df['correct'] = results_df.apply(check_correct, axis=1)
+    results_df.to_csv(f'/mnt/d/math_ttc_search/results/mcts_MATH_1.5B_{num_iters}_iters_final.csv', index=False)
+  
+  

@@ -9,6 +9,7 @@ import pandas as pd
 from math_verify import parse, verify
 import time
 import random
+import numpy as np
 
 #PROMPT
 INTRO = r"Solve the following math problem efficiently and clearly, using a step-by-step format. Conclude with the final answer in the form $\boxed{answer}$."
@@ -100,33 +101,37 @@ TEMPRATURE = 0.75
 MAX_TOKENS = 400
 CHECKPOINT = 200
 SIZE = 1.5
+BATCH_SIZE = 16
+NUM_FEWSHOT_POOLS = 12
+
+FEWSHOT_POOLS = ["\n\n".join(random.sample(FEW_SHOT_EXAMPLES, 5)) for _ in range(NUM_FEWSHOT_POOLS)]
+
 
 def create_sampling_parameters(n=N, temperature=TEMPRATURE, max_tokens=MAX_TOKENS):
     sampling_parameters = SamplingParams(n=n, temperature=temperature, max_tokens=max_tokens)
     return sampling_parameters
   
-def format_prompt(question, pool = FEW_SHOT_EXAMPLES, k = 5):
-  items = random.sample(pool, k)
-  example_txt = "\n\n".join(items)
-
-  return (INTRO + "\n\n" + 
-    example_txt + 
-    f"\nProblem: {question}\n"
-    "Step 1:"
+def format_prompt(question, question_idx):
+  example_txt = FEWSHOT_POOLS[question_idx % NUM_FEWSHOT_POOLS]
+  return (
+    INTRO + "\n\n" +
+    example_txt +
+    f"\n\nProblem: {question}\n" +
+    f"Step 1:"
   )
 
-def generate_responses(df, llm, samples):
+def generate_responses(llm, batch, samples):
   response_dict = {}
   timing_dict = {}
-  for idx, question in enumerate(df['problem']):
-    start_time = time.time()
-    prompts = format_prompt(question)
-    outputs = llm.generate(prompts, samples)
-    timing_dict[question] = time.time() - start_time
-    response_dict[question] = outputs
-
-    if (idx + 1) % CHECKPOINT == 0:
-      print(f"Checkpoint: {idx+1} completed")
+  questions = batch.tolist()
+  prompts = [format_prompt(q, idx) for q, idx in zip(questions, batch.index)]
+  start_time = time.time()
+  outputs = llm.generate(prompts, samples)
+  elapsed = time.time() - start_time
+  for question, output in zip(questions, outputs):
+    timing_dict[question] = elapsed / len(questions)
+    response_dict[question] = [output]
+    
   return response_dict, timing_dict
 
 def check_correct(row):
@@ -176,19 +181,23 @@ if __name__ == "__main__":
   #GENERATE SAMPLES  
   for idx in N:
     samples = create_sampling_parameters(n = idx, temperature = TEMPRATURE, max_tokens = MAX_TOKENS)
-    candidates, timing_dict = generate_responses(df, llm, samples)
-    #EXTRACT
     results = {}
-    for q in df['problem']:
-      results[q] = majority_vote(q, candidates)
+    all_timings = {}
+    for i in np.arange(len(df)//BATCH_SIZE + 1):
+      batch = df['problem'].iloc[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
+      candidates, timing_dict = generate_responses(llm, batch, samples)
+      #EXTRACT
+      all_timings.update(timing_dict)
+      for q in batch:
+        results[q] = majority_vote(q, candidates)
 
     #COLLECT RESULTS
     results_df = pd.DataFrame(list(results.items()), columns=['problem', 'y_pred'])
-    results_df['time_seconds'] = results_df['problem'].map(timing_dict)
+    results_df['time_seconds'] = results_df['problem'].map(all_timings)
     results_df = results_df.merge(df[['problem', 'parsed_answer', 'level', 'subject']], on = 'problem', how = 'left')
     results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
     results_df['correct'] = results_df.apply(check_correct, axis=1)
-    results_df.to_csv(f'results/best_of_n_MATH_1.5B_{idx}_iterations.csv', index=False)
+    results_df.to_csv(f'/mnt/d/math_ttc_search/results/best_of_n_MATH_1.5B_{idx}_iterations.csv', index=False)
 
   
   
