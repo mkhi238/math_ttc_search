@@ -137,6 +137,7 @@ def check_correct(row):
 def process_response(question, candidate): 
   completions = candidate[question][0].outputs # CompletionOutput(idx, text, token_ids, logprobs,...)
   text = completions[0].text
+  print(f"\n=== {question[:60]!r} ===\nFULL TEXT:\n{text}\n")
   try:
     parsed = parse(text)
     return parsed
