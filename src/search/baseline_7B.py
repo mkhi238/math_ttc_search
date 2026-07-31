@@ -155,6 +155,8 @@ if __name__ == "__main__":
   df = make_math_parser(df, 'answer', 'parsed_answer')
   undefined_count = df['parsed_answer'].apply(lambda p: len(p) == 0).sum()
   print(f"{undefined_count} / {len(df)} rows failed to parse at all")
+  df = df.iloc[[3,6,15]]
+  
   
   #GENERATE SAMPLES  
   for idx in N:
