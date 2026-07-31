@@ -190,7 +190,6 @@ def beam_search(question, question_idx, llm, prm_tokenizer, prm_model, n, m, met
       
       for b, output in zip(active_beams, outputs):
         for completion in output.outputs:
-          print(f"stop_reason={completion.stop_reason} | text={completion.text[:100]!r}")
 
           candidates.append({
           "text_so_far": b['text_so_far'] + "\n\n" + f"Step {b['step']}:" + completion.text,
