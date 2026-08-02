@@ -95,7 +95,7 @@ The final answer is $\\boxed{\\frac{1}{2}}$.""",
 #PARAMETERS
 N = [1]
 TEMPRATURE = 0.0
-MAX_TOKENS = 400
+MAX_TOKENS = 800
 CHECKPOINT = 200
 SIZE = 7 #7B model
 

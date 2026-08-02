@@ -17,7 +17,8 @@ from difflib import SequenceMatcher
 import torch
 import torch.nn.functional as F
 from transformers.cache_utils import DynamicCache
-
+import subprocess
+import os
 
 #PARAMETERS
 N = [1, 2, 4, 8, 16]
@@ -260,6 +261,19 @@ def check_correct(row):
     return int(verify(row['y_true'], row['y_pred']))
   except Exception:
     return 0
+  
+def push_to_github(filepath, commit_message, repo_root=os.path.expanduser("~/math_ttc_search")):
+  token = os.environ.get("GITHUB_TOKEN")
+  if not token:
+    print("GITHUB_TOKEN not set, skipping push")
+    return
+  remote_url = f"https://{token}@github.com/mkhi238/math_ttc_search.git"
+  subprocess.run(["git", "-C", repo_root, "add", filepath], check=True)
+  result = subprocess.run(["git", "-C", repo_root, "commit", "-m", commit_message],
+                          capture_output=True, text=True)
+  print(result.stdout, result.stderr)
+  subprocess.run(["git", "-C", repo_root, "push", remote_url, "main"], check=True)
+  print(f"Pushed {filepath} to GitHub.")
 
 if __name__ == "__main__":
   #Monkey Patching to add DynamicCache.from_legacy_cache needed for PRM model from prev HF transformers versions
@@ -368,7 +382,7 @@ if __name__ == "__main__":
   
   
   # #GENERATE & EXTRACT SAMPLES - DBS
-  # for iter in [8]:
+  # for iter in [16]:
   #   results = {}
   #   for idx, q in enumerate(df['problem']):
   #     start = time.time()
@@ -394,7 +408,7 @@ if __name__ == "__main__":
   #   results_df.to_csv(f'/mnt/d/math_ttc_search/results/beam_search_diverse_MATH_1.5B_{iter}_beam(s).csv', index=False)
   
   #GENERATE & EXTRACT SAMPLES - VALUE GUIDED
-  for iter in N:
+  for iter in [4,8,16]:
     results = {}
     for idx, q in enumerate(df['problem']):
       start = time.time()
@@ -418,5 +432,9 @@ if __name__ == "__main__":
     results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
     results_df['correct'] = results_df.apply(check_correct, axis=1)
     results_df.to_csv(f'results/beam_search_value_guided_MATH_1.5B_{iter}_beam(s).csv', index=False)
+    push_to_github(
+      f'src/search/results/beam_search_value_guided_MATH_1.5B_{iter}_beam(s).csv',
+      f'PRM beam search N={iter} results'
+    )
     
 
