@@ -98,7 +98,7 @@ The final answer is $\\boxed{\\frac{1}{2}}$.""",
 #PARAMETERS
 N = [1, 2, 4, 8, 16]
 TEMPRATURE = 0.75
-MAX_TOKENS = 400
+MAX_TOKENS = 800
 CHECKPOINT = 200
 SIZE = 1.5
 BATCH_SIZE = 16
