@@ -24,7 +24,7 @@ import os
 N = [1, 2, 4, 8, 16]
 M = 4
 TEMPRATURE = 0.4
-MAX_TOKENS = 200
+MAX_TOKENS = 250
 CHECKPOINT = 50
 STOP_WORDS = ["\n\n", "Step"]
 MAX_ROUNDS = 10
@@ -261,19 +261,6 @@ def check_correct(row):
     return int(verify(row['y_true'], row['y_pred']))
   except Exception:
     return 0
-  
-def push_to_github(filepath, commit_message, repo_root=os.path.expanduser("~/math_ttc_search")):
-  token = os.environ.get("GITHUB_TOKEN")
-  if not token:
-    print("GITHUB_TOKEN not set, skipping push")
-    return
-  remote_url = f"https://{token}@github.com/mkhi238/math_ttc_search.git"
-  subprocess.run(["git", "-C", repo_root, "add", filepath], check=True)
-  result = subprocess.run(["git", "-C", repo_root, "commit", "-m", commit_message],
-                          capture_output=True, text=True)
-  print(result.stdout, result.stderr)
-  subprocess.run(["git", "-C", repo_root, "push", remote_url, "main"], check=True)
-  print(f"Pushed {filepath} to GitHub.")
 
 if __name__ == "__main__":
   #Monkey Patching to add DynamicCache.from_legacy_cache needed for PRM model from prev HF transformers versions
@@ -320,8 +307,6 @@ if __name__ == "__main__":
   llm = load_vllm(f"Qwen/Qwen2.5-{SIZE}B-Instruct", dtype='float16', gpu_usage=0.65)
   print('loaded llm')
   prm_tokenizer, prm_model = None, None
-  #load_prm("Qwen/Qwen2.5-Math-PRM-7B")
-  print('loaded prm')
   
   #LOAD DATA
   ds = load_dataset("HuggingFaceH4/MATH-500", split="test")
@@ -329,7 +314,7 @@ if __name__ == "__main__":
   df = make_math_parser(df, 'answer', 'parsed_answer')
 
   # #GENERATE & EXTRACT SAMPLES - STANDARD
-  for iter in N:
+  for iter in N[2:]:
     results = {}
     for idx, q in enumerate(df['problem']):
       start = time.time()
@@ -355,7 +340,7 @@ if __name__ == "__main__":
     results_df.to_csv(f'/mnt/d/math_ttc_search/results/beam_search_standard_MATH_1.5B_{iter}_beam(s).csv', index=False)
     
   #GENERATE & EXTRACT SAMPLES - PROBABALISTIC
-  for iter in [16]:
+  for iter in N:
     results = {}
     for idx, q in enumerate(df['problem']):
       start = time.time()
@@ -382,7 +367,7 @@ if __name__ == "__main__":
   
   
   #GENERATE & EXTRACT SAMPLES - DBS
-  for iter in [16]:
+  for iter in N:
     results = {}
     for idx, q in enumerate(df['problem']):
       start = time.time()

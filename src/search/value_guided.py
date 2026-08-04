@@ -262,7 +262,7 @@ def check_correct(row):
   except Exception:
     return 0
   
-def push_to_github(filepath, commit_message, repo_root=os.path.expanduser("~/math_ttc_search")):
+def push_to_github(filepath, commit_message, repo_root="/mnt/d/math_ttc_search"):
   token = os.environ.get("GITHUB_TOKEN")
   if not token:
     print("GITHUB_TOKEN not set, skipping push")

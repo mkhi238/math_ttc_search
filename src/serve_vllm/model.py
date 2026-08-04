@@ -4,7 +4,7 @@ from vllm import LLM
 from vllm.config import AttentionConfig
 from vllm.v1.attention.backends.registry import AttentionBackendEnum
 
-def load_vllm(model, dtype, gpu_usage, max_model_len=3072):
+def load_vllm(model, dtype, gpu_usage, max_model_len=4096):
   llm = LLM(model=model,
             dtype=dtype,
             seed=23,
