@@ -963,3 +963,10 @@ Checkpoint: 400 completed
 Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:44<00:00, 44.17s/it, est. speed input: 11.75 toks/s, output: 17.48 toks/s]Processed prompts: 100%|██████████| 1/1 [00:44<00:00, 44.17s/it, est. speed input: 11.75 toks/s, output: 17.48 toks/s]Processed prompts: 100%|██████████| 1/1 [00:44<00:00, 44.17s/it, est. speed input: 11.75 toks/s, output: 17.48 toks/s]
 Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 595.87it/s]
 Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.26s/it, est. speed input: 30.13 toks/s, output: 17.38 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.26s/it, est. speed input: 30.13 toks/s, output: 17.38 toks/s]Processed prompts: 100%|██████████| 1/1 [00:17<00:00, 17.26s/it, est. speed input: 30.13 toks/s, output: 17.38 toks/s]
+WARNING 08-03 06:21:21 [utils.py:626] [shutdown] Process manager: force killing remaining processes count=1
+WARNING 08-03 06:21:21 [core_client.py:702] [shutdown] MPClient: engine core exited unexpectedly; starting cleanup
+INFO 08-03 06:21:21 [core_client.py:655] [shutdown] MPClient: start timeout=default
+INFO 08-03 06:21:21 [core_client.py:657] [shutdown] MPClient: stopping engine manager
+INFO 08-03 06:21:21 [core_client.py:659] [shutdown] MPClient: engine manager stopped
+INFO 08-03 06:21:21 [core_client.py:660] [shutdown] MPClient: cleaning up background resources
+INFO 08-03 06:21:21 [core_client.py:662] [shutdown] MPClient: complete
