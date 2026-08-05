@@ -17,11 +17,13 @@ Four inference-time strategies evaluated on the same 458-problem MATH-500 subset
 
 ## Key findings
 
-![Accuracy vs. N](image-3.png)
+### Accuracy vs N
+<img width="1350" height="900" alt="image-3" src="https://github.com/user-attachments/assets/3ea2d045-96ab-4dc7-a2ae-e41247bff29f" />
 
-**Search on a smaller model closes, and at higher N exceeds, the gap to a larger single-shot model.** At matched 400-token generation budget, the 7B baseline scores 46.7% single-shot. Best-of-N on the 1.5B model starts well below that at N=1 (33.2%) but climbs monotonically to 49.6% by N=16, surpassing the 7B baseline outright with a model roughly 4.6x smaller. This is the core empirical claim in Snell et al.: that test-time compute, spent well, can be more effective than spending the equivalent compute on parameters. The Search-and-Learn blog demonstrates the same shape of result with Llama 3.2 1B/3B closing the gap to Llama 3.1 8B; this project reproduces that pattern on a different model family (Qwen2.5) and a different scoring signal (majority vote over raw samples rather than a PRM-weighted vote), which is itself informative, the effect isn't specific to one model family or one verification method. Further, it points to a potentially cheaper alternative to LLM-based reward methods like a PRM: ranking beams by cumulative logprob instead still recovers meaningful gains, while staying entirely within the 1.5B model's own compute budget, no second model required.
+**Search on a smaller model closes, and at higher N exceeds, the gap to a larger single-shot model.** At matched 400-token generation budget, the 7B baseline scores 46.7% single-shot. Best-of-N on the 1.5B model starts well below that at N=1 (33.2%) but climbs monotonically to 49.6% by N=16, surpassing the 7B baseline outright with a model roughly 4.6x smaller. This is the core empirical claim in Snell et al.: that test-time compute, spent well, can be more effective than spending the equivalent compute on parameters. The Search-and-Learn blog demonstrates the same shape of result with Llama 3.2 1B/3B closing the gap to Llama 3.1 8B; this project reproduces that pattern on a different model family (Qwen2.5) and a different scoring signal (majority vote over raw samples rather than a PRM-weighted vote), which is itself informative, the effect isn't specific to one model family or one verification method. Further, it points to a potentially cheaper alternative to LLM-based reward methods like a PRM: ranking beams by cumulative logprobs instead still recovers meaningful gains, while staying entirely within the 1.5B model's own compute budget, no second model required.
 
-![Wall-clock cost vs. N](image-4.png)
+### Wall Clock vs N
+<img width="1350" height="900" alt="image-4" src="https://github.com/user-attachments/assets/ef96868f-56a0-4492-bdc5-7c8c58ab7e92" />
 
 **Wall-clock cost scales very differently by method** Best-of-N's cost barely grows until N=16 (1.16s → 3.81s from N=1 to N=8), since independent samples batch essentially for free under vLLM. Every beam variant instead grows close to linearly with N from the very start, standard and probabilistic both roughly triple in cost from N=1 to N=16, because each additional beam means another sequential generation round, not another item in a batch. Diverse beam is the steepest of the three (12.99s → 75.74s, N=1 to N=16), which tracks directly to its implementation: the diversity penalty compares each candidate against every existing beam's `text_so_far` via `SequenceMatcher`, an O(beam_count²) cost per round that best-of-N and the other beam variants don't have.
 
@@ -29,7 +31,8 @@ Four inference-time strategies evaluated on the same 458-problem MATH-500 subset
 
 **Wall-clock is a dimension that particularly favors best-of-N at low latency.** This is my specific extension beyond both source works: recording per-problem generation time for every method and N, then plotting accuracy against it directly.
 
-![Accuracy vs. wall-clock cost](image-2.png)
+### Wall Clock vs Accuracy (Pareto Frontier)
+<img width="1350" height="900" alt="image-2" src="https://github.com/user-attachments/assets/4d1f5d6e-84b2-4bbd-84d4-8cd7495aa5e5" />
 
 At this budget, best-of-N wins the frontier decisively at both ends but not cleanly in the middle. At N=16 (49.6% accuracy, 10.2s/problem) it beats every single beam search configuration on both axes simultaneously, more accurate than even diverse beam's own peak (46.5% at N=8) and still faster than the cheapest beam config tested (11.8s/problem). At N=8, best-of-N (44.3%, 3.8s/problem) remains dramatically faster than any beam variant, an order of magnitude or more, but is no longer the most accurate option at that point, diverse beam's N=8 result edges past it by a couple of points. So the frontier isn't uniformly dominated by one method at every budget, best-of-N wins on cost everywhere and wins outright once N is large enough, while diverse beam holds a narrow, temporary accuracy edge in the middle of the range before its own decline at N=16. That's consistent with the scoring-signal explanation above: paying for extra sequential generation rounds only pays off if what's guiding the selection between rounds is worth the cost, and here that's a close call in the middle of the budget range and a clear loss at both ends.
 
