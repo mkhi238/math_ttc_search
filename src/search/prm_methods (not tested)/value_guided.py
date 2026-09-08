@@ -17,6 +17,8 @@ import torch
 import torch.nn.functional as F
 from transformers.cache_utils import DynamicCache
 from datasets import load_dataset
+import os
+os.makedirs('results', exist_ok=True)
 
 #PARAMETERS
 N = [1, 2, 4, 8, 16]
@@ -320,7 +322,7 @@ if __name__ == "__main__":
   df = make_math_parser(df, 'answer', 'parsed_answer')
   
   #GENERATE & EXTRACT SAMPLES - VALUE GUIDED
-  for iter in [4,8,16]:
+  for iter in [1,2,4,8,16]:
     results = {}
     for idx, q in enumerate(df['problem']):
       start = time.time()
@@ -344,9 +346,6 @@ if __name__ == "__main__":
     results_df = results_df.rename(columns={'parsed_answer': 'y_true'})
     results_df['correct'] = results_df.apply(check_correct, axis=1)
     results_df.to_csv(f'results/beam_search_value_guided_MATH_1.5B_{iter}_beam(s).csv', index=False)
-    push_to_github(
-      f'src/search/results/beam_search_value_guided_MATH_1.5B_{iter}_beam(s).csv',
-      f'PRM beam search N={iter} results'
-    )
+
     
 
