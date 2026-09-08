@@ -147,34 +147,49 @@ def format_prm_prompt(question, text_so_far):
 
 def length_norm(seq_len, alpha = ALPHA):
   return (5+seq_len)**alpha / 6**alpha
-
+#token masks [False, False, False, False, True, False, False, True, ...]
 
 def prm_scoring(question, candidates, prm_tokenizer, prm_model):
   
   step_sep_id = prm_tokenizer.encode("<extra_0>")[0]
-  out = []
-  for c in candidates:
-    prompts = format_prm_prompt(question, c['text_so_far'])
-    #input_ids [15, 892, 33, 4021, step_sep_id, 77, 12, step_sep_id, ...]
-    input_ids = prm_tokenizer.encode(prompts, return_tensors="pt").to(prm_model.device) #(1,N) from return_tensor = 'pt'
-    with torch.no_grad():
-      output = prm_model(input_ids=input_ids)
-    logits = output.logits #(batch = 1, seq len = N, output class (T,F) = 2)
-    #token masks [False, False, False, False, True, False, False, True, ...]
-    token_masks = (input_ids == step_sep_id) #(1,N)
-    #probs is (1,N,2)
-    probs = F.softmax(logits, dim=-1) #(1,N,2)
-    masked_probs = probs * token_masks.unsqueeze(2)
-    
-    nonzero_probs = masked_probs[0][masked_probs[0] != 0] #masked_probs[0] pulls out batch dim, leaving (N,2)
-    step_rewards = nonzero_probs.view(-1, 2)[:, 1]
-    
-    if len(step_rewards) > 0:
-      score = step_rewards[-1].item()
-    else:
-      score = 0.0
+
+  if prm_tokenizer.pad_token is None:
+      prm_tokenizer.pad_token = prm_tokenizer.eos_token
       
-    out.append(score)
+  prompts = [format_prm_prompt(question, c['text_so_far']) for c in candidates] # prompts = [prm_propts]
+    
+  encoded_prompts = prm_tokenizer.encode(prompts, return_tensors="pt", padding = True) #(batch,N) from return_tensor = 'pt'
+  #input_ids [[15, 892, 33, 4021, step_sep_id, 77, 12, step_sep_id, ...], [],..] of len batch
+  input_ids = encoded_prompts['input_ids'].to(prm_model.device)
+  attention_mask = prm_tokenizer.encode('attention_mask').to(prm_model.device)
+  with torch.no_grad():
+    output = prm_model(input_ids=input_ids, attention_mask = attention_mask)
+    
+  # (batch=len(candidates), seq_len, 2)
+  logits = output.logits #(batch = 1, seq len = N, output class (T,F) = 2)
+  
+  #token masks [False, False, False, False, True, False, False, True, ...], True for step_sep_id
+  token_masks = (input_ids == step_sep_id) # (batch, seq_len (N))
+  
+  # (batch, seq_len, 2)
+  probs = F.softmax(logits, dim=-1) #(batch, N (seq_)len, 2), intially was (1, N (seq_len), 2)
+  
+  # (batch, seq_len, 2)
+  token_mask_probs = probs * token_masks.unsqueeze(-1) #pull out the probs for when we end the str, which is the final answer prob for the prompt from PRM scorer
+  
+  # token_mask_probs = (batch, seq_len, 2)
+  
+  out = []
+
+  for i in range(len(candidates)): #iterate through each candidate (0,1,...C candidates)
+    flattened = token_mask_probs[i].view(-1)
+    filtered = flattened[flattened != 0]
+    non_zero_probs = filtered.view(-1, 2)
+    if non_zero_probs.shape[0] == 0:
+      out.append(0.0)
+      continue
+    out.append(non_zero_probs[-1][-1].item() )
+    
   return out
 
 def beam_search(question, question_idx, llm, prm_tokenizer, prm_model, n, m, method = "standard"):
