@@ -158,10 +158,10 @@ def prm_scoring(question, candidates, prm_tokenizer, prm_model):
       
   prompts = [format_prm_prompt(question, c['text_so_far']) for c in candidates] # prompts = [prm_propts]
     
-  encoded_prompts = prm_tokenizer.encode(prompts, return_tensors="pt", padding = True) #(batch,N) from return_tensor = 'pt'
+  encoded_prompts = prm_tokenizer(prompts, return_tensors="pt", padding = True) #(batch,N) from return_tensor = 'pt'
   #input_ids [[15, 892, 33, 4021, step_sep_id, 77, 12, step_sep_id, ...], [],..] of len batch
   input_ids = encoded_prompts['input_ids'].to(prm_model.device)
-  attention_mask = prm_tokenizer.encode('attention_mask').to(prm_model.device)
+  attention_mask = prm_tokenizer('attention_mask').to(prm_model.device)
   with torch.no_grad():
     output = prm_model(input_ids=input_ids, attention_mask = attention_mask)
     
